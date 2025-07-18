@@ -10,6 +10,36 @@ function Home() {
   const [todos, setTodos] = React.useState(() => getTodos())
   const [currentDate, setCurrentDate] = React.useState(() => new Date().toISOString().split('T')[0])
   const [newTodoText, setNewTodoText] = React.useState('')
+  const [isOnline, setIsOnline] = React.useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false)
+  const [isMobile, setIsMobile] = React.useState(false)
+
+  React.useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768)
+      if (window.innerWidth > 768) {
+        setIsMobileMenuOpen(false)
+      }
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   const refreshTodos = () => {
     setTodos(getTodos())
@@ -30,122 +60,360 @@ function Home() {
 
   const currentTodos = getTodosForDate(currentDate)
   const dates = Object.keys(todos).sort().reverse()
+  const today = new Date().toISOString().split('T')[0]
 
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: 'Arial, sans-serif' }}>
-      <div style={{ 
-        width: '250px', 
-        backgroundColor: '#f5f5f5', 
-        padding: '20px',
-        borderRight: '1px solid #ddd',
-        overflowY: 'auto'
-      }}>
-        <h3 style={{ margin: '0 0 20px 0' }}>Days</h3>
-        {dates.map(date => {
-          const stats = getTodoStats(date)
-          const isToday = date === new Date().toISOString().split('T')[0]
-          const isSelected = date === currentDate
-          
-          return (
-            <div
-              key={date}
-              onClick={() => setCurrentDate(date)}
-              style={{
-                padding: '10px',
-                marginBottom: '5px',
-                backgroundColor: isSelected ? '#007bff' : isToday ? '#e3f2fd' : 'white',
-                color: isSelected ? 'white' : 'black',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
-            >
-              <div style={{ fontWeight: 'bold' }}>
-                {formatDate(date)}
-                {isToday && <span style={{ fontSize: '12px', marginLeft: '5px' }}>(Today)</span>}
-              </div>
-              <div style={{ fontSize: '12px', opacity: 0.8 }}>
-                {stats.completed}/{stats.total}
-              </div>
-            </div>
-          )
-        })}
-      </div>
+    <div style={{ 
+      display: 'flex', 
+      height: '100vh', 
+      backgroundColor: '#fafafa'
+    }}>
+      {/* Mobile Overlay */}
+      {isMobile && (
+        <div 
+          className={`mobile-overlay ${isMobileMenuOpen ? 'open' : ''}`}
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
 
-      <div style={{ flex: 1, padding: '20px' }}>
-        <h2 style={{ marginBottom: '20px' }}>
-          {formatDate(currentDate)}
-          {currentDate === new Date().toISOString().split('T')[0] && ' (Today)'}
-        </h2>
-        
-        <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
-          <input
-            type="text"
-            value={newTodoText}
-            onChange={(e) => setNewTodoText(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleAddTodo()}
-            placeholder="Add a new todo..."
-            style={{
-              flex: 1,
-              padding: '10px',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              fontSize: '14px'
-            }}
-          />
-          <button
-            onClick={handleAddTodo}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}
-          >
-            Add Todo
-          </button>
+      {/* Sidebar */}
+      <div 
+        className={isMobile ? `mobile-sidebar ${isMobileMenuOpen ? 'open' : ''}` : ''}
+        style={{ 
+          width: '280px', 
+          backgroundColor: '#fbfbfa', 
+          borderRight: '1px solid #e9e9e7',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
+        {/* Sidebar Header */}
+        <div style={{ 
+          padding: '20px 24px 16px',
+          borderBottom: '1px solid #e9e9e7'
+        }}>
+          <h1 style={{ 
+            fontSize: '16px',
+            fontWeight: '600',
+            color: '#37352f',
+            margin: '0 0 8px 0'
+          }}>
+            Daily Todos
+          </h1>
+          <div style={{
+            fontSize: '12px',
+            color: '#9b9a97',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}>
+            <div style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              backgroundColor: isOnline ? '#0f7b0f' : '#eb5757'
+            }} />
+            {isOnline ? 'Online' : 'Offline'}
+          </div>
         </div>
 
-        <div>
-          {currentTodos.length === 0 ? (
-            <p style={{ color: '#666', fontStyle: 'italic' }}>No todos for this day</p>
-          ) : (
-            currentTodos.map(todo => (
+        {/* Date Navigation */}
+        <div style={{ 
+          flex: 1,
+          padding: '16px 24px',
+          overflowY: 'auto'
+        }}>
+          <div style={{ 
+            fontSize: '11px',
+            fontWeight: '600',
+            color: '#9b9a97',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            marginBottom: '12px'
+          }}>
+            Recent Days
+          </div>
+          
+          {dates.map(date => {
+            const stats = getTodoStats(date)
+            const isToday = date === today
+            const isSelected = date === currentDate
+            
+            return (
               <div
-                key={todo.id}
+                key={date}
+                onClick={() => setCurrentDate(date)}
                 style={{
+                  padding: '8px 12px',
+                  marginBottom: '2px',
+                  backgroundColor: isSelected ? '#2383e2' : 'transparent',
+                  color: isSelected ? 'white' : '#37352f',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  transition: 'all 0.15s ease',
                   display: 'flex',
-                  alignItems: 'center',
-                  padding: '10px',
-                  marginBottom: '8px',
-                  backgroundColor: 'white',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  gap: '10px'
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSelected) {
+                    e.currentTarget.style.backgroundColor = '#f1f1ef'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSelected) {
+                    e.currentTarget.style.backgroundColor = 'transparent'
+                  }
                 }}
               >
-                <input
-                  type="checkbox"
-                  checked={todo.completed}
-                  onChange={() => handleToggleTodo(todo.id)}
-                  style={{ transform: 'scale(1.2)' }}
-                />
-                <span
+                <div>
+                  <div style={{ fontWeight: isToday ? '600' : '400' }}>
+                    {formatDate(date)}
+                    {isToday && (
+                      <span style={{ 
+                        fontSize: '10px', 
+                        marginLeft: '6px',
+                        opacity: 0.8,
+                        fontWeight: '400'
+                      }}>
+                        Today
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {stats.total > 0 && (
+                  <div style={{ 
+                    fontSize: '11px', 
+                    opacity: isSelected ? 0.9 : 0.6,
+                    fontWeight: '500'
+                  }}>
+                    {stats.completed}/{stats.total}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div 
+        className={isMobile ? 'mobile-main' : ''}
+        style={{ 
+          flex: 1, 
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: '#ffffff'
+        }}
+      >
+        {/* Header */}
+        <div 
+          className={isMobile ? 'mobile-header' : ''}
+          style={{ 
+            padding: '32px 40px 24px',
+            borderBottom: '1px solid #e9e9e7',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}
+        >
+          <div>
+            <h2 
+              className={isMobile ? 'mobile-title' : ''}
+              style={{ 
+                fontSize: '32px',
+                fontWeight: '700',
+                color: '#37352f',
+                margin: '0 0 8px 0',
+                lineHeight: '1.2'
+              }}
+            >
+              {formatDate(currentDate)}
+            </h2>
+            {currentDate === today && (
+              <div style={{
+                fontSize: '14px',
+                color: '#9b9a97',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                <span>📅</span>
+                Today's tasks
+              </div>
+            )}
+          </div>
+          
+          {/* Mobile menu button */}
+          {isMobile && (
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              style={{
+                background: 'none',
+                border: '1px solid #e9e9e7',
+                borderRadius: '8px',
+                padding: '8px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#37352f'
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Add Todo Section */}
+        <div 
+          className={isMobile ? 'mobile-content' : ''}
+          style={{ 
+            padding: '24px 40px',
+            borderBottom: '1px solid #e9e9e7'
+          }}
+        >
+          <div style={{ 
+            display: 'flex', 
+            gap: '12px',
+            alignItems: 'center'
+          }}>
+            <input
+              type="text"
+              value={newTodoText}
+              onChange={(e) => setNewTodoText(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleAddTodo()}
+              placeholder="Add a task..."
+              style={{
+                flex: 1,
+                padding: '12px 16px',
+                border: '1px solid #e9e9e7',
+                borderRadius: '8px',
+                fontSize: '15px',
+                backgroundColor: '#ffffff',
+                outline: 'none',
+                transition: 'border-color 0.15s ease',
+                fontFamily: 'inherit'
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = '#2383e2'
+                e.target.style.boxShadow = '0 0 0 3px rgba(35, 131, 226, 0.1)'
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '#e9e9e7'
+                e.target.style.boxShadow = 'none'
+              }}
+            />
+            <button
+              onClick={handleAddTodo}
+              disabled={!newTodoText.trim()}
+              style={{
+                padding: '12px 20px',
+                backgroundColor: newTodoText.trim() ? '#2383e2' : '#e9e9e7',
+                color: newTodoText.trim() ? 'white' : '#9b9a97',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: newTodoText.trim() ? 'pointer' : 'not-allowed',
+                fontSize: '15px',
+                fontWeight: '500',
+                transition: 'all 0.15s ease',
+                fontFamily: 'inherit'
+              }}
+              onMouseEnter={(e) => {
+                if (newTodoText.trim()) {
+                  e.currentTarget.style.backgroundColor = '#1a73d0'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (newTodoText.trim()) {
+                  e.currentTarget.style.backgroundColor = '#2383e2'
+                }
+              }}
+            >
+              Add
+            </button>
+          </div>
+        </div>
+
+        {/* Todos List */}
+        <div 
+          className={isMobile ? 'mobile-content' : ''}
+          style={{ 
+            flex: 1,
+            padding: '24px 40px',
+            overflowY: 'auto'
+          }}
+        >
+          {currentTodos.length === 0 ? (
+            <div style={{ 
+              textAlign: 'center',
+              padding: '60px 20px',
+              color: '#9b9a97'
+            }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>📝</div>
+              <div style={{ fontSize: '16px', fontWeight: '500', marginBottom: '8px' }}>
+                No tasks yet
+              </div>
+              <div style={{ fontSize: '14px' }}>
+                Add your first task to get started!
+              </div>
+            </div>
+          ) : (
+            <div style={{ maxWidth: '700px' }}>
+              {currentTodos.map((todo, index) => (
+                <div
+                  key={todo.id}
                   style={{
-                    flex: 1,
-                    textDecoration: todo.completed ? 'line-through' : 'none',
-                    color: todo.completed ? '#666' : 'black',
-                    fontSize: '14px'
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '12px 16px',
+                    marginBottom: '8px',
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #e9e9e7',
+                    borderRadius: '8px',
+                    gap: '12px',
+                    transition: 'all 0.15s ease',
+                    opacity: todo.completed ? 0.7 : 1
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)'
+                    e.currentTarget.style.borderColor = '#d3d3d1'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = 'none'
+                    e.currentTarget.style.borderColor = '#e9e9e7'
                   }}
                 >
-                  {todo.text}
-                </span>
-              </div>
-            ))
+                  <input
+                    type="checkbox"
+                    checked={todo.completed}
+                    onChange={() => handleToggleTodo(todo.id)}
+                    style={{ 
+                      width: '18px',
+                      height: '18px',
+                      accentColor: '#2383e2',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <span
+                    style={{
+                      flex: 1,
+                      textDecoration: todo.completed ? 'line-through' : 'none',
+                      color: todo.completed ? '#9b9a97' : '#37352f',
+                      fontSize: '15px',
+                      lineHeight: '1.4'
+                    }}
+                  >
+                    {todo.text}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
