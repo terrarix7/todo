@@ -123,20 +123,21 @@ function RootComponent() {
           top: 0,
           left: 0,
           right: 0,
-          backgroundColor: '#ff6b6b',
+          backgroundColor: '#6c757d',
           color: 'white',
-          padding: '8px',
+          padding: '6px',
           textAlign: 'center',
-          fontSize: '14px',
-          zIndex: 1000
+          fontSize: '13px',
+          zIndex: 1000,
+          borderBottom: '1px solid #495057'
         }}>
-          You're offline. Your todos are saved locally and will sync when you're back online.
+          🔌 You're offline
         </div>
       )}
       {updateAvailable && (
         <div style={{
           position: 'fixed',
-          top: isOnline ? 0 : '40px',
+          top: isOnline ? 0 : '32px',
           left: 0,
           right: 0,
           backgroundColor: '#4CAF50',
@@ -162,7 +163,7 @@ function RootComponent() {
           </button>
         </div>
       )}
-      <div style={{ paddingTop: isOnline ? (updateAvailable ? '40px' : '0') : (updateAvailable ? '80px' : '40px') }}>
+      <div style={{ paddingTop: isOnline ? (updateAvailable ? '40px' : '0') : (updateAvailable ? '72px' : '32px') }}>
         <Outlet />
       </div>
       <TanStackRouterDevtools />

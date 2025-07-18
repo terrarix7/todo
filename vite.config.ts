@@ -12,8 +12,9 @@ export default defineConfig({
       swSrc: 'src/sw.ts',
       swDest: 'sw.js',
       globDirectory: 'dist',
-      globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-      injectionPoint: 'self.__SW_MANIFEST'
+      globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,ttf,eot}'],
+      injectionPoint: 'self.__SW_MANIFEST',
+      maximumFileSizeToCacheInBytes: 5000000
     })
   ],
 })
