@@ -87,40 +87,10 @@ function Home() {
           flexDirection: 'column'
         }}
       >
-        {/* Sidebar Header */}
-        <div style={{ 
-          padding: '20px 24px 16px',
-          borderBottom: '1px solid #e9e9e7'
-        }}>
-          <h1 style={{ 
-            fontSize: '16px',
-            fontWeight: '600',
-            color: '#37352f',
-            margin: '0 0 8px 0'
-          }}>
-            Daily Todos
-          </h1>
-          <div style={{
-            fontSize: '12px',
-            color: '#9b9a97',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}>
-            <div style={{
-              width: '6px',
-              height: '6px',
-              borderRadius: '50%',
-              backgroundColor: isOnline ? '#0f7b0f' : '#eb5757'
-            }} />
-            {isOnline ? 'Online' : 'Offline'}
-          </div>
-        </div>
-
         {/* Date Navigation */}
         <div style={{ 
           flex: 1,
-          padding: '16px 24px',
+          padding: '24px',
           overflowY: 'auto'
         }}>
           <div style={{ 
@@ -129,9 +99,27 @@ function Home() {
             color: '#9b9a97',
             textTransform: 'uppercase',
             letterSpacing: '0.5px',
-            marginBottom: '12px'
+            marginBottom: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
           }}>
             Recent Days
+            <div style={{
+              fontSize: '11px',
+              color: '#9b9a97',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}>
+              <div style={{
+                width: '5px',
+                height: '5px',
+                borderRadius: '50%',
+                backgroundColor: isOnline ? '#0f7b0f' : '#eb5757'
+              }} />
+              {isOnline ? 'Online' : 'Offline'}
+            </div>
           </div>
           
           {dates.map(date => {
@@ -207,46 +195,18 @@ function Home() {
           backgroundColor: '#ffffff'
         }}
       >
-        {/* Header */}
-        <div 
-          className={isMobile ? 'mobile-header' : ''}
-          style={{ 
-            padding: '32px 40px 24px',
-            borderBottom: '1px solid #e9e9e7',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}
-        >
-          <div>
-            <h2 
-              className={isMobile ? 'mobile-title' : ''}
-              style={{ 
-                fontSize: '32px',
-                fontWeight: '700',
-                color: '#37352f',
-                margin: '0 0 8px 0',
-                lineHeight: '1.2'
-              }}
-            >
-              {formatDate(currentDate)}
-            </h2>
-            {currentDate === today && (
-              <div style={{
-                fontSize: '14px',
-                color: '#9b9a97',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}>
-                <span>📅</span>
-                Today's tasks
-              </div>
-            )}
-          </div>
-          
-          {/* Mobile menu button */}
-          {isMobile && (
+        {/* Mobile Header */}
+        {isMobile && (
+          <div 
+            className="mobile-header"
+            style={{ 
+              padding: '16px 20px',
+              borderBottom: '1px solid #e9e9e7',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end'
+            }}
+          >
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               style={{
@@ -267,15 +227,14 @@ function Home() {
                 <line x1="3" y1="18" x2="21" y2="18"></line>
               </svg>
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Add Todo Section */}
         <div 
           className={isMobile ? 'mobile-content' : ''}
           style={{ 
-            padding: '24px 40px',
-            borderBottom: '1px solid #e9e9e7'
+            padding: '24px 40px'
           }}
         >
           <div style={{ 
