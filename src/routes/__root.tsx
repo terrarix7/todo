@@ -67,6 +67,14 @@ export const Route = createRootRoute({
 function RootComponent() {
   const [isOnline, setIsOnline] = React.useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
   const [updateAvailable, setUpdateAvailable] = React.useState(false)
+  const [isDarkMode, setIsDarkMode] = React.useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('darkMode')
+      if (saved !== null) return JSON.parse(saved)
+      return window.matchMedia('(prefers-color-scheme: dark)').matches
+    }
+    return false
+  })
 
   React.useEffect(() => {
     const handleOnline = () => setIsOnline(true)
@@ -116,7 +124,7 @@ function RootComponent() {
   }
 
   return (
-    <RootDocument isOnline={isOnline} updateAvailable={updateAvailable} handleUpdate={handleUpdate}>
+    <RootDocument isOnline={isOnline} updateAvailable={updateAvailable} handleUpdate={handleUpdate} isDarkMode={isDarkMode}>
       <Outlet />
       <TanStackRouterDevtools />
     </RootDocument>
@@ -127,12 +135,14 @@ function RootDocument({
   children, 
   isOnline, 
   updateAvailable, 
-  handleUpdate 
+  handleUpdate,
+  isDarkMode
 }: { 
   children: React.ReactNode
   isOnline: boolean
   updateAvailable: boolean
   handleUpdate: () => void
+  isDarkMode: boolean
 }) {
   return (
     <html>
@@ -148,8 +158,8 @@ function RootDocument({
             
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-              background-color: #fafafa;
-              color: #37352f;
+              background-color: ${isDarkMode ? '#15202b' : '#fafafa'};
+              color: ${isDarkMode ? '#ffffff' : '#37352f'};
               line-height: 1.5;
               -webkit-font-smoothing: antialiased;
               -moz-osx-font-smoothing: grayscale;

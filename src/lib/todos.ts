@@ -154,6 +154,57 @@ export function formatTime(date: Date): string {
   })
 }
 
+// Date utility functions that respect user timezone
+export function getTodayDateString(): string {
+  const now = new Date()
+  return now.getFullYear() + '-' + 
+         String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+         String(now.getDate()).padStart(2, '0')
+}
+
+export function getTomorrowDateString(): string {
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  return tomorrow.getFullYear() + '-' + 
+         String(tomorrow.getMonth() + 1).padStart(2, '0') + '-' + 
+         String(tomorrow.getDate()).padStart(2, '0')
+}
+
+export function getDayAfterTomorrowDateString(): string {
+  const dayAfter = new Date()
+  dayAfter.setDate(dayAfter.getDate() + 2)
+  return dayAfter.getFullYear() + '-' + 
+         String(dayAfter.getMonth() + 1).padStart(2, '0') + '-' + 
+         String(dayAfter.getDate()).padStart(2, '0')
+}
+
+export function getFutureDates(): string[] {
+  return [getTodayDateString(), getTomorrowDateString(), getDayAfterTomorrowDateString()]
+}
+
+export function isDateInPast(dateString: string): boolean {
+  const date = new Date(dateString + 'T00:00:00')
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return date < today
+}
+
+export function isDaysTooOld(dateString: string, days: number): boolean {
+  const date = new Date(dateString + 'T00:00:00')
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - days)
+  cutoff.setHours(0, 0, 0, 0)
+  return date < cutoff
+}
+
+export function canAddContentToDate(dateString: string): boolean {
+  return !isDateInPast(dateString)
+}
+
+export function canToggleTodoOnDate(dateString: string): boolean {
+  return !isDaysTooOld(dateString, 2) // Allow toggling for 2 days after the date
+}
+
 // Export/Import functions
 export interface ExportData {
   version: string

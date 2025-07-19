@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { getTodos, addTodo, toggleTodo, getTodosForDate, getTodoStats, formatDate, getJournal, addJournalEntry, getJournalForDate, formatTime, exportAllData, importAndMergeData } from '../lib/todos'
+import { getTodos, addTodo, toggleTodo, getTodosForDate, getTodoStats, formatDate, getJournal, addJournalEntry, getJournalForDate, formatTime, exportAllData, importAndMergeData, getTodayDateString, getFutureDates, canAddContentToDate, canToggleTodoOnDate } from '../lib/todos'
 
 export const Route = createFileRoute('/')({
   component: Home,
@@ -9,7 +9,7 @@ export const Route = createFileRoute('/')({
 function Home() {
   const [todos, setTodos] = React.useState(() => getTodos())
   const [journal, setJournal] = React.useState(() => getJournal())
-  const [currentDate, setCurrentDate] = React.useState(() => new Date().toISOString().split('T')[0])
+  const [currentDate, setCurrentDate] = React.useState(() => getTodayDateString())
   const [newTodoText, setNewTodoText] = React.useState('')
   const [newJournalText, setNewJournalText] = React.useState('')
   const [isOnline, setIsOnline] = React.useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
@@ -19,6 +19,16 @@ function Home() {
   const [showExportPanel, setShowExportPanel] = React.useState(false)
   const [importText, setImportText] = React.useState('')
   const [importStatus, setImportStatus] = React.useState<{ type: 'success' | 'error' | 'info' | null; message: string }>({ type: null, message: '' })
+  const [swStatus, setSwStatus] = React.useState<{ type: 'success' | 'error' | 'info' | null; message: string }>({ type: null, message: '' })
+  const [updateAvailable, setUpdateAvailable] = React.useState(false)
+  const [isDarkMode, setIsDarkMode] = React.useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('darkMode')
+      if (saved !== null) return JSON.parse(saved)
+      return window.matchMedia('(prefers-color-scheme: dark)').matches
+    }
+    return false
+  })
 
   React.useEffect(() => {
     const handleOnline = () => setIsOnline(true)
@@ -46,6 +56,71 @@ function Home() {
     window.addEventListener('resize', checkScreenSize)
     
     return () => window.removeEventListener('resize', checkScreenSize)
+  }, [])
+
+  // Theme persistence
+  React.useEffect(() => {
+    localStorage.setItem('darkMode', JSON.stringify(isDarkMode))
+  }, [isDarkMode])
+
+  const toggleTheme = () => {
+    setIsDarkMode(!isDarkMode)
+  }
+
+  // Theme colors
+  const theme = {
+    bg: isDarkMode ? '#15202b' : '#fafafa',
+    cardBg: isDarkMode ? '#192734' : '#ffffff',
+    sidebarBg: isDarkMode ? '#192734' : '#fbfbfa',
+    text: isDarkMode ? '#ffffff' : '#37352f',
+    textMuted: isDarkMode ? '#8b98a5' : '#9b9a97',
+    border: isDarkMode ? '#38444d' : '#e9e9e7',
+    accent: isDarkMode ? '#1d9bf0' : '#2383e2',
+    accentHover: isDarkMode ? '#1a8cd8' : '#1a73d0'
+  }
+
+  // Background service worker update check
+  React.useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      const checkForUpdates = async () => {
+        try {
+          const registration = await navigator.serviceWorker.getRegistration()
+          if (registration) {
+            // Check if there's already a waiting service worker
+            if (registration.waiting) {
+              setUpdateAvailable(true)
+            }
+            
+            // Listen for new service workers
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing
+              if (newWorker) {
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    setUpdateAvailable(true)
+                  }
+                })
+              }
+            })
+            
+            // Periodically check for updates (every 30 seconds)
+            const updateInterval = setInterval(async () => {
+              try {
+                await registration.update()
+              } catch (error) {
+                // Silently fail - this is a background check
+              }
+            }, 30000)
+            
+            return () => clearInterval(updateInterval)
+          }
+        } catch (error) {
+          // Silently fail - this is a background check
+        }
+      }
+      
+      checkForUpdates()
+    }
   }, [])
 
   const refreshTodos = () => {
@@ -76,6 +151,27 @@ function Home() {
       refreshJournal()
     }
   }
+
+  // Global keyboard handler for Cmd+Enter
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault()
+        
+        // Check which input is focused
+        const activeElement = document.activeElement as HTMLElement
+        
+        if (activeElement?.tagName === 'INPUT' && newTodoText.trim()) {
+          handleAddTodo()
+        } else if (activeElement?.tagName === 'TEXTAREA' && newJournalText.trim()) {
+          handleAddJournalEntry()
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [newTodoText, newJournalText])
 
   const handleExportData = async () => {
     try {
@@ -132,16 +228,42 @@ function Home() {
     }
   }
 
+  const handleApplyUpdate = async () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration()
+        
+        if (registration?.waiting) {
+          registration.waiting.postMessage({ type: 'SKIP_WAITING' })
+          setSwStatus({ type: 'success', message: 'Updating app...' })
+          setTimeout(() => window.location.reload(), 500)
+        } else {
+          // Force update check one more time
+          await registration?.update()
+          setTimeout(() => window.location.reload(), 500)
+        }
+      }
+    } catch (error) {
+      setSwStatus({ type: 'error', message: 'Update failed' })
+      setTimeout(() => setSwStatus({ type: null, message: '' }), 2000)
+    }
+  }
+
   const currentTodos = getTodosForDate(currentDate)
   const currentJournalEntries = getJournalForDate(currentDate)
-  const dates = Object.keys({...todos, ...journal}).sort().reverse()
-  const today = new Date().toISOString().split('T')[0]
+  const futureDates = getFutureDates()
+  const existingDates = Object.keys({...todos, ...journal})
+  const allDates = Array.from(new Set([...futureDates, ...existingDates])).sort().reverse()
+  const today = getTodayDateString()
+  
+  const canAddToCurrentDate = canAddContentToDate(currentDate)
+  const isCurrentDateToday = currentDate === today
 
   return (
     <div style={{ 
       display: 'flex', 
       height: '100vh', 
-      backgroundColor: '#fafafa'
+      backgroundColor: theme.bg
     }}>
       {/* Mobile Overlay */}
       {isMobile && (
@@ -156,8 +278,8 @@ function Home() {
         className={isMobile ? `mobile-sidebar ${isMobileMenuOpen ? 'open' : ''}` : ''}
         style={{ 
           width: '280px', 
-          backgroundColor: '#fbfbfa', 
-          borderRight: '1px solid #e9e9e7',
+          backgroundColor: theme.sidebarBg, 
+          borderRight: `1px solid ${theme.border}`,
           display: 'flex',
           flexDirection: 'column'
         }}
@@ -171,7 +293,7 @@ function Home() {
           <div style={{ 
             fontSize: '11px',
             fontWeight: '600',
-            color: '#9b9a97',
+            color: theme.textMuted,
             textTransform: 'uppercase',
             letterSpacing: '0.5px',
             marginBottom: '12px',
@@ -182,22 +304,55 @@ function Home() {
             Recent Days
             <div style={{
               fontSize: '11px',
-              color: '#9b9a97',
+              color: theme.textMuted,
               display: 'flex',
               alignItems: 'center',
-              gap: '4px'
+              gap: '8px'
             }}>
+              <button
+                onClick={toggleTheme}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: theme.textMuted,
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {isDarkMode ? (
+                  // Sun icon
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="5"/>
+                    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                  </svg>
+                ) : (
+                  // Moon icon
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                  </svg>
+                )}
+              </button>
               <div style={{
-                width: '5px',
-                height: '5px',
-                borderRadius: '50%',
-                backgroundColor: isOnline ? '#0f7b0f' : '#eb5757'
-              }} />
-              {isOnline ? 'Online' : 'Offline'}
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                <div style={{
+                  width: '5px',
+                  height: '5px',
+                  borderRadius: '50%',
+                  backgroundColor: isOnline ? '#0f7b0f' : '#eb5757'
+                }} />
+                {isOnline ? 'Online' : 'Offline'}
+              </div>
             </div>
           </div>
           
-          {dates.map(date => {
+          {allDates.map(date => {
             const stats = getTodoStats(date)
             const isToday = date === today
             const isSelected = date === currentDate
@@ -209,8 +364,8 @@ function Home() {
                 style={{
                   padding: '8px 12px',
                   marginBottom: '2px',
-                  backgroundColor: isSelected ? '#2383e2' : 'transparent',
-                  color: isSelected ? 'white' : '#37352f',
+                  backgroundColor: isSelected ? theme.accent : 'transparent',
+                  color: isSelected ? 'white' : theme.text,
                   borderRadius: '6px',
                   cursor: 'pointer',
                   fontSize: '14px',
@@ -221,7 +376,7 @@ function Home() {
                 }}
                 onMouseEnter={(e) => {
                   if (!isSelected) {
-                    e.currentTarget.style.backgroundColor = '#f1f1ef'
+                    e.currentTarget.style.backgroundColor = isDarkMode ? '#38444d' : '#f1f1ef'
                   }
                 }}
                 onMouseLeave={(e) => {
@@ -259,7 +414,7 @@ function Home() {
           })}
           
           {/* Export/Import Section */}
-          <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #e9e9e7' }}>
+          <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: `1px solid ${theme.border}` }}>
             <button
               onClick={() => setShowExportPanel(!showExportPanel)}
               style={{
@@ -271,7 +426,7 @@ function Home() {
                 cursor: 'pointer',
                 fontSize: '11px',
                 fontWeight: '600',
-                color: '#9b9a97',
+                color: theme.textMuted,
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
                 textAlign: 'left',
@@ -281,7 +436,7 @@ function Home() {
                 justifyContent: 'space-between'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#f1f1ef'
+                e.currentTarget.style.backgroundColor = isDarkMode ? '#38444d' : '#f1f1ef'
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = 'transparent'
@@ -298,13 +453,13 @@ function Home() {
             </button>
             
             {showExportPanel && (
-              <div style={{ marginTop: '12px', padding: '16px', backgroundColor: '#f8f8f7', borderRadius: '8px' }}>
+              <div style={{ marginTop: '12px', padding: '16px', backgroundColor: isDarkMode ? '#38444d' : '#f8f8f7', borderRadius: '8px' }}>
                 {/* Export Section */}
                 <div style={{ marginBottom: '16px' }}>
                   <div style={{
                     fontSize: '12px',
                     fontWeight: '500',
-                    color: '#37352f',
+                    color: theme.text,
                     marginBottom: '8px'
                   }}>
                     Export Data
@@ -314,7 +469,7 @@ function Home() {
                     style={{
                       width: '100%',
                       padding: '8px 12px',
-                      backgroundColor: '#2383e2',
+                      backgroundColor: theme.accent,
                       color: 'white',
                       border: 'none',
                       borderRadius: '6px',
@@ -324,17 +479,17 @@ function Home() {
                       transition: 'background-color 0.15s ease'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#1a73d0'
+                      e.currentTarget.style.backgroundColor = theme.accentHover
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = '#2383e2'
+                      e.currentTarget.style.backgroundColor = theme.accent
                     }}
                   >
                     📋 Copy All Data
                   </button>
                   <div style={{
                     fontSize: '11px',
-                    color: '#9b9a97',
+                    color: theme.textMuted,
                     marginTop: '4px',
                     lineHeight: '1.3'
                   }}>
@@ -347,7 +502,7 @@ function Home() {
                   <div style={{
                     fontSize: '12px',
                     fontWeight: '500',
-                    color: '#37352f',
+                    color: theme.text,
                     marginBottom: '8px'
                   }}>
                     Import Data
@@ -360,21 +515,15 @@ function Home() {
                     style={{
                       width: '100%',
                       padding: '8px 10px',
-                      border: '1px solid #e9e9e7',
+                      border: `1px solid ${theme.border}`,
                       borderRadius: '6px',
                       fontSize: '11px',
-                      backgroundColor: '#ffffff',
+                      backgroundColor: theme.cardBg,
+                      color: theme.text,
                       outline: 'none',
-                      transition: 'border-color 0.15s ease',
                       fontFamily: 'monospace',
                       resize: 'vertical',
                       marginBottom: '8px'
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#2383e2'
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#e9e9e7'
                     }}
                   />
                   <button
@@ -383,31 +532,21 @@ function Home() {
                     style={{
                       width: '100%',
                       padding: '8px 12px',
-                      backgroundColor: importText.trim() ? '#2383e2' : '#e9e9e7',
-                      color: importText.trim() ? 'white' : '#9b9a97',
+                      backgroundColor: importText.trim() ? theme.accent : (isDarkMode ? '#38444d' : '#e9e9e7'),
+                      color: importText.trim() ? 'white' : theme.textMuted,
                       border: 'none',
                       borderRadius: '6px',
                       cursor: importText.trim() ? 'pointer' : 'not-allowed',
                       fontSize: '13px',
                       fontWeight: '500',
-                      transition: 'background-color 0.15s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (importText.trim()) {
-                        e.currentTarget.style.backgroundColor = '#1a73d0'
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (importText.trim()) {
-                        e.currentTarget.style.backgroundColor = '#2383e2'
-                      }
+                      fontFamily: 'inherit'
                     }}
                   >
                     📥 Merge Data
                   </button>
                   <div style={{
                     fontSize: '11px',
-                    color: '#9b9a97',
+                    color: theme.textMuted,
                     marginTop: '4px',
                     lineHeight: '1.3'
                   }}>
@@ -432,6 +571,53 @@ function Home() {
               </div>
             )}
           </div>
+
+          {/* Service Worker Update Section - Only show when update is available */}
+          {updateAvailable && (
+            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: `1px solid ${theme.border}` }}>
+              <button
+                onClick={handleApplyUpdate}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  backgroundColor: theme.accent,
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  color: 'white',
+                  textAlign: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = theme.accentHover
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = theme.accent
+                }}
+              >
+                Update Available
+              </button>
+              
+              {/* Service Worker Status Message */}
+              {swStatus.type && (
+                <div style={{
+                  marginTop: '8px',
+                  padding: '8px',
+                  borderRadius: '6px',
+                  fontSize: '11px',
+                  backgroundColor: swStatus.type === 'success' ? '#e8f5e8' : swStatus.type === 'error' ? '#ffeaea' : '#e8f4fd',
+                  color: swStatus.type === 'success' ? '#0f7b0f' : swStatus.type === 'error' ? '#d73a49' : '#0366d6',
+                  border: `1px solid ${swStatus.type === 'success' ? '#c6e6c6' : swStatus.type === 'error' ? '#f5c6cb' : '#b8daff'}`,
+                  textAlign: 'center',
+                  lineHeight: '1.3'
+                }}>
+                  {swStatus.message}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -442,7 +628,7 @@ function Home() {
           flex: 1, 
           display: 'flex',
           flexDirection: 'column',
-          backgroundColor: '#ffffff'
+          backgroundColor: theme.cardBg
         }}
       >
         {/* Mobile Header */}
@@ -495,21 +681,17 @@ function Home() {
               flex: isDesktop ? 1 : 'auto',
               display: 'flex',
               flexDirection: 'column',
-              borderRight: isDesktop ? '1px solid #e9e9e7' : 'none'
+              borderRight: isDesktop ? `1px solid ${theme.border}` : 'none'
             }}
           >
             {/* Add Todo Section */}
-            <div 
-              className={isMobile ? 'mobile-content' : ''}
-              style={{ 
-                padding: '24px 40px'
-              }}
-            >
-              <div style={{ 
-                display: 'flex', 
-                gap: '12px',
-                alignItems: 'center'
-              }}>
+            {canAddToCurrentDate && (
+              <div 
+                className={isMobile ? 'mobile-content' : ''}
+                style={{ 
+                  padding: '24px 40px'
+                }}
+              >
                 <input
                   type="text"
                   value={newTodoText}
@@ -517,62 +699,26 @@ function Home() {
                   onKeyPress={(e) => e.key === 'Enter' && handleAddTodo()}
                   placeholder="Add a task..."
                   style={{
-                    flex: 1,
-                    padding: '12px 16px',
-                    border: '1px solid #e9e9e7',
-                    borderRadius: '8px',
+                    width: '100%',
+                    padding: '12px 0',
+                    border: 'none',
+                    borderBottom: `1px solid ${theme.border}`,
                     fontSize: '15px',
-                    backgroundColor: '#ffffff',
+                    backgroundColor: 'transparent',
+                    color: theme.text,
                     outline: 'none',
-                    transition: 'border-color 0.15s ease',
                     fontFamily: 'inherit'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = '#2383e2'
-                    e.target.style.boxShadow = '0 0 0 3px rgba(35, 131, 226, 0.1)'
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '#e9e9e7'
-                    e.target.style.boxShadow = 'none'
                   }}
                 />
-                <button
-                  onClick={handleAddTodo}
-                  disabled={!newTodoText.trim()}
-                  style={{
-                    padding: '12px 20px',
-                    backgroundColor: newTodoText.trim() ? '#2383e2' : '#e9e9e7',
-                    color: newTodoText.trim() ? 'white' : '#9b9a97',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: newTodoText.trim() ? 'pointer' : 'not-allowed',
-                    fontSize: '15px',
-                    fontWeight: '500',
-                    transition: 'all 0.15s ease',
-                    fontFamily: 'inherit'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (newTodoText.trim()) {
-                      e.currentTarget.style.backgroundColor = '#1a73d0'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (newTodoText.trim()) {
-                      e.currentTarget.style.backgroundColor = '#2383e2'
-                    }
-                  }}
-                >
-                  Add
-                </button>
               </div>
-            </div>
+            )}
 
             {/* Todos List */}
             <div 
               className={isMobile ? 'mobile-content' : ''}
               style={{ 
                 flex: 1,
-                padding: '0 40px 24px',
+                padding: canAddToCurrentDate ? '0 40px 24px' : '24px 40px',
                 overflowY: 'auto'
               }}
             >
@@ -582,7 +728,6 @@ function Home() {
                   padding: '60px 20px',
                   color: '#9b9a97'
                 }}>
-                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>📝</div>
                   <div style={{ fontSize: '16px', fontWeight: '500', marginBottom: '8px' }}>
                     No tasks yet
                   </div>
@@ -598,40 +743,31 @@ function Home() {
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        padding: '12px 16px',
-                        marginBottom: '8px',
-                        backgroundColor: '#ffffff',
-                        border: '1px solid #e9e9e7',
-                        borderRadius: '8px',
+                        padding: '8px 0',
                         gap: '12px',
-                        transition: 'all 0.15s ease',
-                        opacity: todo.completed ? 0.7 : 1
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)'
-                        e.currentTarget.style.borderColor = '#d3d3d1'
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.boxShadow = 'none'
-                        e.currentTarget.style.borderColor = '#e9e9e7'
+                        opacity: todo.completed ? 0.5 : 1
                       }}
                     >
                       <input
                         type="checkbox"
                         checked={todo.completed}
-                        onChange={() => handleToggleTodo(todo.id)}
+                        onChange={() => canToggleTodoOnDate(currentDate) && handleToggleTodo(todo.id)}
+                        disabled={!canToggleTodoOnDate(currentDate)}
                         style={{ 
-                          width: '18px',
-                          height: '18px',
-                          accentColor: '#2383e2',
-                          cursor: 'pointer'
+                          width: '16px',
+                          height: '16px',
+                          margin: 0,
+                          border: 'none',
+                          outline: 'none',
+                          opacity: canToggleTodoOnDate(currentDate) ? 1 : 0.5,
+                          cursor: canToggleTodoOnDate(currentDate) ? 'pointer' : 'not-allowed'
                         }}
                       />
                       <span
                         style={{
                           flex: 1,
                           textDecoration: todo.completed ? 'line-through' : 'none',
-                          color: todo.completed ? '#9b9a97' : '#37352f',
+                          color: todo.completed ? theme.textMuted : theme.text,
                           fontSize: '15px',
                           lineHeight: '1.4'
                         }}
@@ -651,95 +787,45 @@ function Home() {
               flex: isDesktop ? 1 : 'auto',
               display: 'flex',
               flexDirection: 'column',
-              borderTop: !isDesktop ? '1px solid #e9e9e7' : 'none'
+              borderTop: !isDesktop ? `1px solid ${theme.border}` : 'none'
             }}
           >
             {/* Add Journal Entry Section */}
-            <div 
-              className={isMobile ? 'mobile-content' : ''}
-              style={{ 
-                padding: '24px 40px'
-              }}
-            >
-              <div style={{ 
-                display: 'flex', 
-                flexDirection: 'column',
-                gap: '12px'
-              }}>
+            {isCurrentDateToday && (
+              <div 
+                className={isMobile ? 'mobile-content' : ''}
+                style={{ 
+                  padding: '24px 40px'
+                }}
+              >
                 <textarea
                   value={newJournalText}
                   onChange={(e) => setNewJournalText(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                      handleAddJournalEntry()
-                    }
-                  }}
                   placeholder="Write your thoughts..."
                   rows={3}
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
-                    border: '1px solid #e9e9e7',
-                    borderRadius: '8px',
+                    padding: '12px 0',
+                    border: 'none',
+                    borderBottom: `1px solid ${theme.border}`,
                     fontSize: '15px',
-                    backgroundColor: '#ffffff',
+                    backgroundColor: 'transparent',
+                    color: theme.text,
                     outline: 'none',
-                    transition: 'border-color 0.15s ease',
                     fontFamily: 'inherit',
                     resize: 'vertical',
                     minHeight: '80px'
                   }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = '#2383e2'
-                    e.target.style.boxShadow = '0 0 0 3px rgba(35, 131, 226, 0.1)'
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '#e9e9e7'
-                    e.target.style.boxShadow = 'none'
-                  }}
                 />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontSize: '12px', color: '#9b9a97' }}>
-                    Press Cmd+Enter to add entry
-                  </div>
-                  <button
-                    onClick={handleAddJournalEntry}
-                    disabled={!newJournalText.trim()}
-                    style={{
-                      padding: '8px 16px',
-                      backgroundColor: newJournalText.trim() ? '#2383e2' : '#e9e9e7',
-                      color: newJournalText.trim() ? 'white' : '#9b9a97',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: newJournalText.trim() ? 'pointer' : 'not-allowed',
-                      fontSize: '14px',
-                      fontWeight: '500',
-                      transition: 'all 0.15s ease',
-                      fontFamily: 'inherit'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (newJournalText.trim()) {
-                        e.currentTarget.style.backgroundColor = '#1a73d0'
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (newJournalText.trim()) {
-                        e.currentTarget.style.backgroundColor = '#2383e2'
-                      }
-                    }}
-                  >
-                    Add Entry
-                  </button>
-                </div>
               </div>
-            </div>
+            )}
 
             {/* Journal Entries */}
             <div 
               className={isMobile ? 'mobile-content' : ''}
               style={{ 
                 flex: 1,
-                padding: '0 40px 24px',
+                padding: isCurrentDateToday ? '0 40px 24px' : '24px 40px',
                 overflowY: 'auto'
               }}
             >
@@ -749,7 +835,6 @@ function Home() {
                   padding: '60px 20px',
                   color: '#9b9a97'
                 }}>
-                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>📖</div>
                   <div style={{ fontSize: '16px', fontWeight: '500', marginBottom: '8px' }}>
                     No journal entries yet
                   </div>
@@ -765,25 +850,13 @@ function Home() {
                       style={{
                         display: 'flex',
                         gap: '16px',
-                        padding: '16px',
-                        marginBottom: '12px',
-                        backgroundColor: '#ffffff',
-                        border: '1px solid #e9e9e7',
-                        borderRadius: '8px',
-                        transition: 'all 0.15s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)'
-                        e.currentTarget.style.borderColor = '#d3d3d1'
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.boxShadow = 'none'
-                        e.currentTarget.style.borderColor = '#e9e9e7'
+                        padding: '8px 0',
+                        marginBottom: '8px'
                       }}
                     >
                       <div style={{
                         fontSize: '13px',
-                        color: '#9b9a97',
+                        color: theme.textMuted,
                         fontWeight: '500',
                         minWidth: '60px',
                         paddingTop: '2px'
@@ -794,7 +867,7 @@ function Home() {
                         flex: 1,
                         fontSize: '15px',
                         lineHeight: '1.5',
-                        color: '#37352f',
+                        color: theme.text,
                         whiteSpace: 'pre-wrap'
                       }}>
                         {entry.text}
