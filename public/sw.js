@@ -1,5 +1,5 @@
 // Development service worker for testing
-const CACHE_NAME = 'todos-dev-v1';
+const CACHE_NAME = 'todos-dev-v2';
 const urlsToCache = [
   '/',
   '/manifest.json',
@@ -18,8 +18,22 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
-        // Return cached version or fetch from network
-        return response || fetch(event.request);
+        if (response) {
+          return response;
+        }
+        
+        // Try to fetch from network
+        return fetch(event.request).catch((error) => {
+          console.log('Fetch failed; returning offline page instead.', error);
+          
+          // For navigation requests, return the cached index.html
+          if (event.request.mode === 'navigate') {
+            return caches.match('/');
+          }
+          
+          // For other requests, just reject
+          throw error;
+        });
       })
   );
 });
